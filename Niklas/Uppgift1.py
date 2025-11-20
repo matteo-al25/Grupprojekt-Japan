@@ -1,8 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import numpy as np
-import seaborn as sns
 import hashlib as hl
 
 athlete_events = pd.read_csv(r'athlete_events.csv')

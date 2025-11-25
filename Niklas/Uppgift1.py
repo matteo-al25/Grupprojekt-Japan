@@ -1,14 +1,16 @@
+from dash import Dash, html, dcc, Input, Output
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import hashlib as hl
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+
+app = Dash(__name__)
 
 athlete_events = pd.read_csv(r'athlete_events.csv')
 
 athlete_events_enc = athlete_events.copy()
 athlete_events_enc['Name'] = athlete_events_enc['Name'].apply(lambda x: hl.sha256(x.encode()).hexdigest())
 athlete_events_enc = athlete_events_enc.rename(columns={'Name': 'SHA-256-Name'})
-
 
 def gruppering(df):
     medaljer = df[df['Medal'].notna()]
@@ -57,64 +59,135 @@ japan = japan_stats(medalj_data)
 japan_lagvinster = medalj_data['lagsporter'][medalj_data['lagsporter']['NOC']=='JPN']
 antal_jap, antal_jap_f, antal_jap_m = könsfördelning(japan['os_japaner'])
 
-lagsporter_topp50 = (medalj_data['lagsporter'].groupby('NOC')['Count'].sum().sort_values(ascending=False).head(50))
-indsporter_topp50 = (medalj_data['indiv'].groupby('NOC')['Count'].sum().sort_values(ascending=False).head(50))
+lagsporter_topp50_medalj = (medalj_data['lagsporter'].groupby('NOC')['Count'].sum().sort_values(ascending=False).head(50))
+indsporter_topp50_medalj = (medalj_data['indiv'].groupby('NOC')['Count'].sum().sort_values(ascending=False).head(50))
+medalj_total = medalj_data['lagsporter'].groupby('NOC')['Count'].sum() + medalj_data['indiv'].groupby('NOC')['Count'].sum()
+podium_total = medalj_data['lagsporter'].groupby('NOC').size() + medalj_data['indiv'].groupby('NOC').size()
+topp50_medalj = medalj_total.sort_values(ascending=False).head(50)
+topp50_podium = podium_total.sort_values(ascending=False).head(50)
+fig_height = 600
+fig_margin = dict(t=80, l=40, r=40, b=40)
 
-fig = plt.figure(figsize=(20, 14))
-gs = gridspec.GridSpec(3, 2, height_ratios=[1, 1, 1])
+fig_topp50 = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Lagsporter topp 50', 'Individuella topp 50')
+)
+fig_topp50.add_trace(
+    go.Bar(x=lagsporter_topp50_medalj.index, y=lagsporter_topp50_medalj.values),
+    row=1, col=1
+)
+fig_topp50.add_trace(
+    go.Bar(x=indsporter_topp50_medalj.index, y=indsporter_topp50_medalj.values),
+    row=1, col=2
+)
+fig_topp50.update_layout(title='Topp 50 länder: lag vs individuellt', height=fig_height, margin=fig_margin)
 
-ax1 = fig.add_subplot(gs[0, :])
-ax1.bar(lagsporter_topp50.index, lagsporter_topp50.values)
-ax1.set_title('Medaljer i lagsporter för topp 50 land')
-ax1.set_xlabel('Land (NOC)')
-ax1.set_ylabel('Antal medaljer')
-ax1.tick_params(axis='x', rotation=90)
+fig_medaljer = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Globalt', 'Japan')
+)
+fig_medaljer.add_trace(
+    go.Bar(x=['Lagsporter','Individuellt'],
+           y=[medalj_data['lagsporter']['Count'].sum(), medalj_data['indiv']['Count'].sum()]),
+    row=1, col=1
+)
+fig_medaljer.add_trace(
+    go.Bar(x=['Lagsporter','Individuellt'],
+           y=[japan['lagvinster']['Count'].sum(), japan['indvinster']['Count'].sum()]),
+    row=1, col=2
+)
+fig_medaljer.update_layout(title='Medaljer lag vs individ (globalt + Japan)', height=fig_height, margin=fig_margin)
 
-ax2 = fig.add_subplot(gs[1, :])
-ax2.bar(indsporter_topp50.index, indsporter_topp50.values)
-ax2.set_title('Medaljer i individuella sporter för topp 50 land')
-ax2.set_xlabel('Land (NOC)')
-ax2.tick_params(axis='x', rotation=90)
+fig_kön = make_subplots(
+    rows=2, cols=2,
+    specs=[
+        [{'type': 'domain'}, {'type': 'domain'}],
+        [{'type': 'domain'}, {'type': 'domain'}]
+    ],
+    subplot_titles=('Guld', 'Silver', 'Brons', 'Atleter totalt'),
+    horizontal_spacing=0.05,
+    vertical_spacing=0.05  
+)
+fig_kön.add_trace(
+    go.Pie(labels=['Kvinnor','Män'],
+           values=[len(japan['guld'][japan['guld']['Sex']=='F']),
+                   len(japan['guld'][japan['guld']['Sex']=='M'])]),
+    row=1, col=1
+)
+fig_kön.add_trace(
+    go.Pie(labels=['Kvinnor','Män'],
+           values=[len(japan['silver'][japan['silver']['Sex']=='F']),
+                   len(japan['silver'][japan['silver']['Sex']=='M'])]),
+    row=1, col=2
+)
+fig_kön.add_trace(
+    go.Pie(labels=['Kvinnor','Män'],
+           values=[len(japan['brons'][japan['brons']['Sex']=='F']),
+                   len(japan['brons'][japan['brons']['Sex']=='M'])]),
+    row=2, col=1
+)
+fig_kön.add_trace(
+    go.Pie(labels=['Kvinnor','Män'],
+           values=[antal_jap_f, antal_jap_m]),
+    row=2, col=2
+)
+fig_kön.update_layout(title='Japan könsfördelningar')
 
-ax3 = fig.add_subplot(gs[2, 0])
-ax3.bar(['Lagsporter', 'Individuellt'], [medalj_data['lagsporter']['Count'].sum(), medalj_data['indiv']['Count'].sum()])
-ax3.set_title('Antal medaljer i lag vs individuellt (globalt)')
-ax3.set_ylabel('Antal medaljer')
+fig_podium = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Globalt', 'Japan')
+)
+fig_podium.add_trace(
+    go.Bar(x=['Lagsporter','Individuellt'],
+           y=[len(medalj_data['lagsporter']), len(medalj_data['indiv'])]),
+    row=1, col=1
+)
+fig_podium.add_trace(
+    go.Bar(x=['Lagsporter','Individuellt'],
+           y=[len(japan_lagvinster), len(japan['indvinster'])]),
+    row=1, col=2
+)
+fig_podium.update_layout(title='Podiumplaceringar lag vs individ (globalt + Japan)', height=fig_height, margin=fig_margin)
 
-ax4 = fig.add_subplot(gs[2, 1])
-ax4.bar(['Lagsporter', 'Individuellt'], [japan['lagvinster']['Count'].sum(), japan['indvinster']['Count'].sum()])
-ax4.set_title('Antal medaljer i lag vs individuellt (Japan)')
-ax4.set_ylabel('Antal medaljer')
+fig_topp50_tot = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Medaljer topp 50', 'Podiumplaceringar topp 50')
+)
+fig_topp50_tot.add_trace(
+    go.Bar(x=topp50_medalj.index, y=topp50_medalj.values),
+    row=1, col=1
+)
+fig_topp50_tot.add_trace(
+    go.Bar(x=topp50_podium.index, y=topp50_podium.values),
+    row=1, col=2
+)
+fig_topp50_tot.update_layout(title='Topp 50 länder: medaljer vs podiumplaceringar', height=fig_height, margin=fig_margin)
 
-plt.tight_layout()
-plt.show()
+plots = {
+    'Topp 50 medaljer': fig_topp50,
+    'Medaljer lag vs individ (globalt + Japan)': fig_medaljer,
+    'Japan könsfördelningar': fig_kön,
+    'Podiumplaceringar (globalt + Japan)': fig_podium,
+    'Topp 50 podiumjämförelse': fig_topp50_tot    
+}
 
-fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+app.layout = html.Div([
+    html.H1('Min första Dash-app'),
+    
+    dcc.Dropdown(
+        id='dropdown',
+        options=[{'label': key, 'value': key} for key in plots.keys()],
+        value=list(plots.keys())[0]
+    ),
+    dcc.Graph(id='plot')
+])
 
-axes[0].bar(['Lagsporter', 'Individuellt'], [len(medalj_data['lagsporter']), len(medalj_data['indiv'])])
-axes[0].set_title('Antal podiumplaceringar i lag vs individuellt (globalt)')
-axes[0].set_ylabel('Antal podiumplaceringar')
+@app.callback(
+    Output('plot', 'figure'),
+    Input('dropdown', 'value')
+)
+def update_graph(selected_plot):
+    return plots[selected_plot]
 
-axes[1].bar(['Lagsporter', 'Individuellt'], [len(japan_lagvinster), len(japan['indvinster'])])
-axes[1].set_title('Antal podiumplaceringar i lag vs individuellt (Japan)')
-axes[1].set_ylabel('Antal podiumplaceringar')
-
-plt.tight_layout()
-plt.show()
-
-fig, axes = plt.subplots(2, 2, figsize=(12, 12))
-
-axes[0, 0].pie([len(japan['guld'][japan['guld']['Sex']=='F']), len(japan['guld'][japan['guld']['Sex']=='M'])], labels=['Kvinnor', 'Män'], autopct='%2.2f%%', startangle=90)
-axes[0, 0].set_title('Könsfördelning guldplaceringar (Japan)')
-
-axes[0, 1].pie([len(japan['silver'][japan['silver']['Sex']=='F']), len(japan['silver'][japan['silver']['Sex']=='M'])], labels=['Kvinnor', 'Män'], autopct='%2.2f%%', startangle=90)
-axes[0, 1].set_title('Könsfördelning silverplaceringar (Japan)')
-
-axes[1, 0].pie([len(japan['brons'][japan['brons']['Sex']=='F']), len(japan['brons'][japan['brons']['Sex']=='M'])], labels=['Kvinnor', 'Män'], autopct='%2.2f%%', startangle=90)
-axes[1, 0].set_title('Könsfördelning bronsplaceringar (Japan)')
-
-axes[1, 1].pie([antal_jap_f, antal_jap_m], labels=['Kvinnor', 'Män'], autopct='%2.2f%%', startangle=90)
-axes[1, 1].set_title('Könsfördelning atleter (Japan)')
-
-plt.tight_layout()
-plt.show()
+if __name__ == '__main__':  
+    app.run(debug=True)

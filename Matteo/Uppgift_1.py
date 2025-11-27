@@ -3,8 +3,7 @@ import hashlib
 import matplotlib.pyplot as plt
 from dash import Dash, html
 
-df = pd.read_csv('/mnt/c/Users/emicr/Documents/GitHub/Grupprojekt-Japan/athlete_events.csv')
-
+df = pd.read_csv('https://raw.githubusercontent.com/matteo-al25/Grupprojekt-Japan/main/athlete_events.csv')
 # SHA-256
 df['Name_h'] = df['Name'].apply(
     lambda name: 
